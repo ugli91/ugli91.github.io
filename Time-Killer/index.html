@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Time Killer taşındı</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; min-height: 100vh; background: #0b0907; color: #e8dcc4; font: 15px/1.5 -apple-system, Segoe UI, sans-serif; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; }
+  .panel { width: min(560px, 100%); background: #18120d; border: 2px solid #6b5233; border-radius: 10px; padding: 14px 16px; box-shadow: 0 10px 40px #000; text-align: center; }
+  h1 { font-family: Georgia, serif; color: #e9c77b; margin: 4px 0 8px; }
+  a { color: #ffd84a; }
+  .note { color: #c9b48a; font-size: 13px; }
+  .code { font-family: Georgia, serif; font-size: min(30px, 7.4vw); letter-spacing: 2px; white-space: nowrap; color: #ffd84a; font-weight: bold; user-select: text; -webkit-user-select: text; margin: 4px 0; }
+  button { font: inherit; border-radius: 8px; cursor: pointer; }
+  .act { background: #6b4a22; border: 1px solid #c9a050; color: #fff3d0; padding: 9px 18px; font-size: 16px; margin: 6px; }
+  .chip { background: #2a1d12; border: 1px solid #8a6a3c; color: #e8dcc4; padding: 5px 12px; }
+  details { text-align: left; margin-top: 12px; } summary { cursor: pointer; font-weight: bold; }
+  img { width: 100%; max-width: 420px; border-radius: 8px; border: 1px solid #5d4f3c; margin: 6px auto 2px; display: block; }
+</style>
+</head>
+<body>
+<!--
+  Time Killer'ın ESKİ adresi (ugli91.github.io/Time-Killer). Oyun artık kendi sunucusunda; bu sayfa sadece taşınma içindir.
+  Aynı adreste olduğu için tarayıcıdaki eski kayıtları (localStorage: tk_slot_0..2, tk_meta) okuyabilir:
+  hepsini sunucu yedeğine yollar (server/relay.js → bput), kodu gösterir, yeni adresi ?yedek=KOD ile açar.
+  Kaynağı: Time-Killer reposu → tools/eski-adres/. Oyun kodu burada yok.
+-->
+<div class="panel">
+  <h1>🚚 Taşındık!</h1>
+  <p>Time Killer artık yeni adresinde:<br><b><a id="newLink" href="#" style="font-size:18px"></a></b></p>
+  <p class="note" id="info"></p>
+  <div id="codeBox" hidden><div class="note">Senin yedek kodun</div><div class="code" id="code">…</div>
+    <button class="chip" id="copy">📋 Kodu kopyala</button><div class="note" id="st">Yedekleniyor…</div></div>
+  <button class="act" id="go"></button>
+  <details id="steps" hidden><summary>📖 Elle taşımak istersen: adım adım</summary>
+    <p><b>1.</b> Yukarıdaki <b>yedek kodunu</b> not al. Kimseyle paylaşma.</p>
+    <p><b>2.</b> Yeni adresi aç → en alttaki <b>☁️ Daha önce oynadın mı? Sunucudaki yedeğini geri yükle</b><img src="tasinma/3-yeni-adres.jpg" alt="Adım 2"></p>
+    <p><b>3.</b> Kodunu yaz (ya da 📋 Yapıştır) → <b>Bul</b><img src="tasinma/4-bul.jpg" alt="Adım 3"></p>
+    <p><b>4.</b> <b>📥 Bu yedeği yükle</b>: karakterlerin, sandığın ve başarımların gelir.<img src="tasinma/5-yukle.jpg" alt="Adım 4"></p>
+  </details>
+</div>
+<script>
+'use strict';
+const NEW = 'https://time4kill.duckdns.org/', SRV = new URLSearchParams(location.search).get('srv') || 'wss://time4kill.duckdns.org';
+const SLOT_N = 3, SLOT_KEY = i => 'tk_slot_' + i, META_KEY = 'tk_meta', CH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const $ = s => document.querySelector(s);
+const host = NEW.replace(/^https:\/\/|\/$/g, '');
+$('#newLink').href = NEW; $('#newLink').textContent = host;
+let slots = [], meta = null;
+try { for (let i = 0; i < SLOT_N; i++) slots.push(localStorage.getItem(SLOT_KEY(i))); meta = localStorage.getItem(META_KEY); } catch (e) {}
+const has = slots.some(Boolean);
+let m = {}; try { m = JSON.parse(meta || '{}') || {}; } catch (e) {}
+const newKey = () => { const r = new Uint32Array(12); crypto.getRandomValues(r); let k = ''; for (let i = 0; i < 12; i++) k += CH[r[i] % 32]; return k.slice(0, 4) + '-' + k.slice(4, 8) + '-' + k.slice(8); };
+let key = m.backup && /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(m.backup.key) ? m.backup.key : null;
+function put() {
+  return new Promise(res => {
+    let ws, done = false; const fin = ok => { if (done) return; done = true; try { ws.close(); } catch (e) {} res(ok); };
+    const sum = slots.map(v => { try { const s = JSON.parse(v); return s ? { cls: s.cls, lvl: s.lvl } : null; } catch (e) { return null; } });
+    const data = { v: 1, ver: 'eski-adres', t: Date.now(), name: (m.settings && m.settings.netName) || 'Oyuncu', sum, slots, meta };
+    try { ws = new WebSocket(SRV); } catch (e) { return fin(false); }
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'bput', key, data }));
+    ws.onmessage = ev => { try { const r = JSON.parse(ev.data); if (r.t === 'bok') fin(true); else if (r.t === 'err') fin(false); } catch (e) {} };
+    ws.onerror = () => fin(false);
+    setTimeout(() => fin(false), 10000);
+  });
+}
+let ready = null;
+if (has) {
+  if (!key) { key = newKey(); m.backup = Object.assign({}, m.backup, { key, auto: true }); try { localStorage.setItem(META_KEY, JSON.stringify(m)); meta = JSON.stringify(m); } catch (e) {} }
+  $('#info').innerHTML = 'Bu adreste artık oynanmıyor. Aşağıdaki düğmeye bas: karakterlerin, sandığın ve başarımların yedeklenip yeni adrese taşınır. Orada <b>"📥 Bu yedeği yükle"</b> de. Ana ekrana eklediysen yeni adresi de ekle, bunu sil.';
+  $('#codeBox').hidden = false; $('#steps').hidden = false; $('#code').textContent = key;
+  $('#go').textContent = '🚚 Karakterlerimle taşı';
+  ready = put().then(ok => { $('#st').textContent = ok ? '✅ Yedeklendi' : '⚠️ Sunucuya ulaşılamadı. İnternetini kontrol edip düğmeye bas.'; return ok; });
+} else {
+  $('#info').textContent = 'Bu adreste artık oynanmıyor. Bu cihazda kayıtlı karakter yok: yeni adresten başlayabilirsin.';
+  $('#go').textContent = '🚚 Yeni adrese git';
+}
+$('#copy').onclick = async () => {
+  let ok = false;
+  try { await navigator.clipboard.writeText(key); ok = true; } catch (e) {
+    try { const t = document.createElement('textarea'); t.value = key; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select(); ok = document.execCommand('copy'); t.remove(); } catch (e2) {}
+  }
+  $('#copy').textContent = ok ? '✅ Kopyalandı' : 'Kodu seçip kopyala';
+  setTimeout(() => { $('#copy').textContent = '📋 Kodu kopyala'; }, 2000);
+};
+$('#go').onclick = async () => {
+  if (!has) { location.href = NEW; return; }
+  $('#go').disabled = true;
+  const ok = (ready && await ready) || await put(); ready = null;
+  if (!ok) { $('#st').textContent = '⚠️ Sunucuya ulaşılamadı. İnternetini kontrol edip tekrar dene.'; $('#go').disabled = false; return; }
+  $('#st').textContent = '✅ Yedeklendi, yeni adrese geçiliyor…';
+  location.href = NEW + '?yedek=' + key;
+};
+// eski oyunun önbelleği (service worker) kalmasın
+if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))).catch(() => {});
+</script>
+</body>
+</html>
