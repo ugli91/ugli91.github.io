@@ -50,6 +50,8 @@ const host = NEW.replace(/^https:\/\/|\/$/g, '');
 $('#newLink').href = NEW; $('#newLink').textContent = host;
 let slots = [], meta = null;
 try { for (let i = 0; i < SLOT_N; i++) slots.push(localStorage.getItem(SLOT_KEY(i))); meta = localStorage.getItem(META_KEY); } catch (e) {}
+// oyunun ilk sürümleri (v0.1–v0.4) tek kayıt tutuyordu: 'timekiller_save_v1'. O sürümden sonra hiç açılmadıysa kayıt hâlâ orada → 1. yuva
+try { const old = localStorage.getItem('timekiller_save_v1'); if (old && !slots[0]) slots[0] = old; else if (old && !slots.includes(old)) { const e = slots.indexOf(null); if (e >= 0) slots[e] = old; } } catch (e) {}
 const has = slots.some(Boolean);
 let m = {}; try { m = JSON.parse(meta || '{}') || {}; } catch (e) {}
 const newKey = () => { const r = new Uint32Array(12); crypto.getRandomValues(r); let k = ''; for (let i = 0; i < 12; i++) k += CH[r[i] % 32]; return k.slice(0, 4) + '-' + k.slice(4, 8) + '-' + k.slice(8); };
@@ -57,7 +59,7 @@ let key = m.backup && /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.
 function put() {
   return new Promise(res => {
     let ws, done = false; const fin = ok => { if (done) return; done = true; try { ws.close(); } catch (e) {} res(ok); };
-    const sum = slots.map(v => { try { const s = JSON.parse(v); return s ? { cls: s.cls, lvl: s.lvl } : null; } catch (e) { return null; } });
+    const sum = slots.map(v => { try { const s = JSON.parse(v); return s ? { cls: s.cls || 'barb', lvl: s.lvl } : null; } catch (e) { return null; } });
     const data = { v: 1, ver: 'eski-adres', t: Date.now(), name: (m.settings && m.settings.netName) || 'Oyuncu', sum, slots, meta };
     try { ws = new WebSocket(SRV); } catch (e) { return fin(false); }
     ws.onopen = () => ws.send(JSON.stringify({ t: 'bput', key, data }));
